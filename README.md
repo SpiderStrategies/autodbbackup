@@ -6,6 +6,7 @@ Install Instructions
 2. Add required archives.
 
 		perl -MCPAN -e "install Config::Properties"
+		perl -MCPAN -e "install XML::LibXML"
 		perl -MCPAN -e "install Amazon::S3"
 
 3. To your classpath, add (whatever this location is on your machine):
