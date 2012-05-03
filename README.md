@@ -7,7 +7,9 @@ Install Instructions
 
 		perl -MCPAN -e "install Config::Properties"
 		perl -MCPAN -e "install XML::LibXML"
+		perl -MCPAN -e "install List::MoreUtils"
 		perl -MCPAN -e "install Amazon::S3"
+		perl -MCPAN -e "install Net::SMTP_auth"
 
 3. To your classpath, add (whatever this location is on your machine):
 
@@ -19,6 +21,7 @@ Install Instructions
 	* Set the uploaded file prefix (s3keyprefix). This is essentially the "directory" the backup will be in.  This must end with a front slash (/).
 	* Set the databases to back up as a comma separated list (no spaces)
 	* Set the location to be used for the sql files (outputlocation). If this is a windows system, you must use double backslashes.
+	* Set the email server information so that you can be notified of the backups.  If you don't want notifications, remove the "to" email address from the configuration.
 	  
 5. Configure your machine to invoke the backupdbs.pl
 	1. Right click on "My Computer", click "Manage".
