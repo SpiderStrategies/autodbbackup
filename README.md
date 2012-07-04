@@ -10,6 +10,7 @@ Install Instructions
 		perl -MCPAN -e "install List::MoreUtils"
 		perl -MCPAN -e "install Amazon::S3"
 		perl -MCPAN -e "install Net::SMTP_auth"
+		perl -MCPAN -e "install Net::Amazon::S3"
 
 3. To your classpath, add (whatever this location is on your machine):
 

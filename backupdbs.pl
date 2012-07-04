@@ -15,7 +15,7 @@ use Config::Properties;
 use File::Copy;
 use Archive::Zip qw( :ERROR_CODES :CONSTANTS );
 use List::MoreUtils qw(firstidx);
-use Amazon::S3;
+use Net::Amazon::S3;
 use Net::SMTP_auth;
 
 
@@ -25,7 +25,8 @@ $configFileLocation = "config.properties";
 # keeps track of all the database backup filenames we've created
 @databaseFileNames = ();
 @emailMessages = ();
-$fileUsage = "one";
+$fileUsage = "multiple";
+$deleteBackupFiles = "no";
 
 setupConfigFileLocation();
 
@@ -33,22 +34,24 @@ setupConfiguredValues();
 
 backupDatabases();
 
-writeRestoreFiles();
 
 if($fileUsage eq "one") {
+	writeRestoreFiles();
+	
 	# zip up the directory
 	createSingleZipFile();
 	
 	# copy the zip file to a day of the week
-	createDayOfWeekCopies();
-}
-else {
-	# create a file per database
-	createMultipleZipFiles();
+#	createDayOfWeekCopies();
+
+	# send the file (backup.zip) to s3
+	sendFilesToS3();
+	if("yes" eq $deleteBackupFiles) {
+		deletePendingFiles();
+	}
 }
 
 
-sendFilesToS3();
 
 sendEmails();
 
@@ -91,6 +94,7 @@ sub setupConfiguredValues {
 	$s3password = $properties->getProperty('s3password');
 	$s3bucket = $properties->getProperty('s3bucket');
 	$parentOutputLocation = $properties->getProperty('outputlocation');
+	$rollingBackups = $properties->getProperty('rollingbackups');
 	
 	$emailAddressesProperty = $properties->getProperty('emailAddresses');
 	if($emailAddressesProperty) {
@@ -133,7 +137,7 @@ sub setupConfiguredValues {
 		}
 
 		# remove information_schema and mysql since we probably don't want those
-		@toRemove = qw / information_schema mysql asdlfkj /;
+		@toRemove = qw / information_schema mysql /;
 		@databases = removeItemNames(\@databases, \@toRemove);
 	}
 	else {
@@ -142,8 +146,14 @@ sub setupConfiguredValues {
 	}
 	
 	# figure out the day of the week
+	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time());
 	@dotwAbbr = qw( Sunday Monday Tuesday Wednesday Thursday Friday Saturday );
-	$dayOfTheWeek = @dotwAbbr[(localtime(time()))[6]];
+	$dayOfTheWeek = @dotwAbbr[$wday];
+	$weekOfTheMonth = "week" . sprintf("%d", $mday / 7);
+	@monthAbbr = qw( Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec );
+	$monthOfTheYear = $monthAbbr[$mon];
+	$yearValue = $year + 1900;
+	
 }
 
 # removeItemNames(@theSourceList, @theItemsToRemove)
@@ -186,6 +196,10 @@ sub backupDatabases {
 		
 		# print any errors
 		print $result, "\n";
+		
+		unless($fileUsage eq "one") {
+			createAndSendZipFileForDatabase($database);
+		}
 	}
 }
 
@@ -226,38 +240,78 @@ sub createSingleZipFile {
 	
 	# add the zip file to the list of files to send
 	push @filesToSend, $zipoutput;
+	
+	push @filesToDelete, $zipoutput;
+	push @filesToDelete, "$outputlocation/$databaseFileName";
+	push @filesToDelete, "$outputlocation/restore.bat";
+	push @filesToDelete, "$outputlocation/restore.sh";
 }
 
 sub createMultipleZipFiles {
 	
 	foreach $database (@databases) {
-		# create the zip file object
-		my $zipoutput = "$parentOutputLocation/$database" .  ".zip";
-		my $dayofweekzipoutput = "$parentOutputLocation/$database" . "_" . $dayOfTheWeek . ".zip";
-		my $zip = Archive::Zip->new();
-		
-		# add the restore scripts
-		$zip->addFile( "$outputlocation/$database.sql", "$database.sql" );
-		
-		# write the archive
-		unless ( $zip->writeToFileNamed($zipoutput) == AZ_OK ) {
-			print "Could not write zip file $zipoutput";
-		}
-		
-		# what we're doing here is copying this backup to a file with the name of a day of the week.
-		copy($zipoutput, $dayofweekzipoutput);
-		
-		# add the zip file to the list of files to send
-		push @filesToSend, $zipoutput;
-		push @filesToSend, $dayofweekzipoutput;
+		createAndSendZipFileForDatabase($database);
+	}
+}
+
+
+sub createAndSendZipFileForDatabase {
+	my ($database) = @_;
+	# create the zip file object
+	my $zipoutput = "$parentOutputLocation/$database" .  ".zip";
+#		my $dayofweekzipoutput = "$parentOutputLocation/$database" . "_" . $dayOfTheWeek . ".zip";
+	my $zip = Archive::Zip->new();
+	
+	# add the restore scripts
+	my $databaseSQLFileLocation = "$outputlocation/$database.sql";
+	$zip->addFile( $databaseSQLFileLocation, "$database.sql" );
+	
+	# write the archive
+	unless ( $zip->writeToFileNamed($zipoutput) == AZ_OK ) {
+		print "Could not write zip file $zipoutput";
+	}
+	
+	# what we're doing here is copying this backup to a file with the name of a day of the week.
+#		copy($zipoutput, $dayofweekzipoutput);
+	
+	# add the zip file to the list of files to send
+	push @filesToSend, $zipoutput;
+	
+	push @filesToDelete, $zipoutput;
+	push @filesToDelete, $databaseSQLFileLocation;
+	
+	sendFilesToS3();
+	
+	if("yes" eq $deleteBackupFiles) {
+		deletePendingFiles();
+	}
+}
+
+sub deletePendingFiles {
+	foreach my $fileToDelete (@filesToDelete) {
+		deleteAFile($fileToDelete);
+	}
+	
+	@filesToDelete = ();
+}
+
+sub deleteAFile {
+	my ($fileName) = @_;
+	my $retCode = unlink($fileName);
+	print "ulinking file returned: $retCode \n"; 
+	unless($retCode == 1) {
+		my $msg = "The file $fileName was not deleted.\n";
+		print $msg;
+		push @emailMessages, $msg;
 	}
 }
 
 sub sendFilesToS3 {
-	$s3 = Amazon::S3->new(
+	$s3 = Net::Amazon::S3->new(
 		{
 			aws_access_key_id     => $s3id,
-			aws_secret_access_key => $s3password
+			aws_secret_access_key => $s3password,
+			retry 				  => 1
 		}
 	);
 	
@@ -288,7 +342,38 @@ sub sendFilesToS3 {
 			$msg = "Could not upload file $suffix.";
 		}
 		print "$msg\n";
+		
+		createRollingBackupS3Keys($s3KeyPrefix . $suffix);
+		
 		push @emailMessages, $msg;
+	}
+	
+	@filesToSend = ();
+}
+
+sub createRollingBackupS3Keys {
+	my ($currentFileName) = @_;
+	$currentFileName =~ m:(.*)[.](.*?)$:;
+	$pre = $1;
+	$post = "." . $2;
+	
+	my $currentS3Key = "/$s3bucket/$currentFileName";
+	
+	if($rollingBackups =~ m/day/) {
+		my $s3duplicateDestination = $pre . "_" . $dayOfTheWeek . $post;
+		$bucket->copy_key($s3duplicateDestination, $currentS3Key);
+	}
+	if($rollingBackups =~ m/week/) {
+		my $s3duplicateDestination = $pre . "_" . $weekOfTheMonth . $post;
+		$bucket->copy_key($s3duplicateDestination, $currentS3Key);
+	}
+	if($rollingBackups =~ m/month/) {
+		my $s3duplicateDestination = $pre . "_" . $monthOfTheYear . $post;
+		$bucket->copy_key($s3duplicateDestination, $currentS3Key);
+	}
+	if($rollingBackups =~ m/year/) {
+		my $s3duplicateDestination = $pre . "_" . $yearValue . $post;
+		$bucket->copy_key($s3duplicateDestination, $currentS3Key);
 	}
 }
 
