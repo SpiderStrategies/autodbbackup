@@ -6,13 +6,13 @@ Install Instructions
 2. Add required archives.
 
 		perl -MCPAN -e "install Config::Properties"
-		perl -MCPAN -e "install XML::LibXML"
+		perl -MCPAN -e "install XML::LibXML" (on ubuntu systems: sudo apt-get install libxml-libxml-perl)
 		perl -MCPAN -e "install List::MoreUtils"
-		perl -MCPAN -e "install Amazon::S3"
 		perl -MCPAN -e "install Net::SMTP_auth"
 		perl -MCPAN -e "install Net::Amazon::S3"
+		on ubuntu systems: sudo apt-get install libarchive-zip-perl
 
-3. To your classpath, add (whatever this location is on your machine):
+3. If Windows: To your classpath, add (whatever this location is on your machine):
 
 	C:\strawberry\perl\site\lib\auto\XML\LibXML
 
@@ -23,8 +23,14 @@ Install Instructions
 	* Set the databases to back up as a comma separated list (no spaces)
 	* Set the location to be used for the sql files (outputlocation). If this is a windows system, you must use double backslashes.
 	* Set the email server information so that you can be notified of the backups.  If you don't want notifications, remove the "to" email address from the configuration.
+    * Set the directoriesToBackup to a comma separated list of the directories to zip and backup to s3.  If this is a Windows system, you must muse double backslashes.  Leave blank if no directories are to be backed up.
+
+5. The backup script can be invoked without a configuration file or invoked with the single argument of the configuration file to use.  Invoke like:
+    perl backupdbs.pl
+    or
+    perl backupdbs.pl /my/config/file.properties
 	  
-5. Configure your machine to invoke the backupdbs.pl
+6. Configure your machine to invoke the backupdbs.pl regularly.  On a Windows system:
 	1. Right click on "My Computer", click "Manage".
 	2. Click Task Scheduler
 	3. Click Create Basic Task from the right-hand pane

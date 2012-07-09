@@ -26,7 +26,9 @@ $configFileLocation = "config.properties";
 @databaseFileNames = ();
 @emailMessages = ();
 $fileUsage = "multiple";
-$deleteBackupFiles = "no";
+
+# yes or no to delete the files after they've been used
+$deleteBackupFiles = "yes";
 
 setupConfigFileLocation();
 
@@ -34,6 +36,7 @@ setupConfiguredValues();
 
 backupDatabases();
 
+zipDirectories();
 
 if($fileUsage eq "one") {
 	writeRestoreFiles();
@@ -102,6 +105,11 @@ sub setupConfiguredValues {
 	}
 	else {
 		print "No email addresses.\n";
+	}
+	
+	$directoriesToBackupProperty = $properties->getProperty("directoriesToBackup");
+	if($directoriesToBackupProperty) {
+		@directoriesToBackup = split(/\,/, $directoriesToBackupProperty);
 	}
 	
 	$emailServer = $properties->getProperty('emailServer');
@@ -175,7 +183,7 @@ sub backupDatabases {
 	# iterate over each database listed in file
 	foreach $database (@databases) 
 	{
-		print "processing: $database \n";
+		print "\nprocessing: $database \n";
 		
 		# figure out where to write the file
 		$dbFileName = $database . ".sql";
@@ -195,7 +203,9 @@ sub backupDatabases {
 		$result = `$command`;
 		
 		# print any errors
-		print $result, "\n";
+		if($result) {
+			print $result, "\n";
+		}
 		
 		unless($fileUsage eq "one") {
 			createAndSendZipFileForDatabase($database);
@@ -259,7 +269,6 @@ sub createAndSendZipFileForDatabase {
 	my ($database) = @_;
 	# create the zip file object
 	my $zipoutput = "$parentOutputLocation/$database" .  ".zip";
-#		my $dayofweekzipoutput = "$parentOutputLocation/$database" . "_" . $dayOfTheWeek . ".zip";
 	my $zip = Archive::Zip->new();
 	
 	# add the restore scripts
@@ -270,9 +279,6 @@ sub createAndSendZipFileForDatabase {
 	unless ( $zip->writeToFileNamed($zipoutput) == AZ_OK ) {
 		print "Could not write zip file $zipoutput";
 	}
-	
-	# what we're doing here is copying this backup to a file with the name of a day of the week.
-#		copy($zipoutput, $dayofweekzipoutput);
 	
 	# add the zip file to the list of files to send
 	push @filesToSend, $zipoutput;
@@ -287,6 +293,47 @@ sub createAndSendZipFileForDatabase {
 	}
 }
 
+sub zipDirectories {
+	foreach my $directory (@directoriesToBackup) {
+		zipDirectory($directory, $outputlocation);
+	}
+}
+
+sub zipDirectory {
+	my $dirToZip = shift @_;
+	my $outputDirectory = shift @_;
+	my @nameParts = split(/\//, $dirToZip);
+	my $zipName = pop @nameParts;
+	
+	my $zipoutput = $parentOutputLocation . "/" . $zipName . ".zip";
+	
+	print "\nzipping directory $zipName\n";
+	
+	my $zip = Archive::Zip->new();
+	
+	# add the restore scripts
+	$zip->addTree( $dirToZip );
+	
+	# write the archive
+	unless ( $zip->writeToFileNamed($zipoutput) == AZ_OK ) {
+		my $msg = "Could not write zip file $zipoutput.\n";
+		print $msg;
+		push @emailMessages, $msg;
+	}
+	
+	# add the zip file to the list of files to send
+	push @filesToSend, $zipoutput;
+	
+	push @filesToDelete, $zipoutput;
+	
+	sendFilesToS3();
+	
+	if("yes" eq $deleteBackupFiles) {
+		deletePendingFiles();
+	}
+	
+}
+
 sub deletePendingFiles {
 	foreach my $fileToDelete (@filesToDelete) {
 		deleteAFile($fileToDelete);
@@ -298,9 +345,11 @@ sub deletePendingFiles {
 sub deleteAFile {
 	my ($fileName) = @_;
 	my $retCode = unlink($fileName);
-	print "ulinking file returned: $retCode \n"; 
 	unless($retCode == 1) {
 		my $msg = "The file $fileName was not deleted.\n";
+		print $msg;
+		push @emailMessages, $msg;
+		$msg = "ulinking file returned: $retCode \n"; 
 		print $msg;
 		push @emailMessages, $msg;
 	}
@@ -317,10 +366,10 @@ sub sendFilesToS3 {
 	
 	$bucket = $s3->bucket($s3bucket);
 	
-	print "uploading to:", $bucket->{bucket}, "\n";
 	
 	
 	foreach $fileToSend (@filesToSend) {
+		print "uploading $fileToSend to ", $bucket->{bucket}, "\n";
 		# Adding the current copy of the databases
 		
 		# find the last part of the name
