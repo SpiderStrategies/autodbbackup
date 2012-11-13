@@ -3,10 +3,10 @@ Install Instructions
 
 1. Download and install Perl.  On windows, I used strawberry perl from the url [http://strawberryperl.com/](http://strawberryperl.com/).
 
-1.5 On an Ubuntu server, you may have to the following to install build tools.
+2 On an Ubuntu server, you may have to the following to install build tools.
 		apt-get install build-essential
 
-2. Add required archives.
+3. Add required archives.
 
 		perl -MCPAN -e "install Config::Properties"
 		perl -MCPAN -e "install XML::LibXML" (on ubuntu systems: sudo apt-get install libxml-libxml-perl)
@@ -15,11 +15,11 @@ Install Instructions
 		perl -MCPAN -e "install Net::Amazon::S3"
 		on ubuntu systems: sudo apt-get install libarchive-zip-perl
 
-3. If Windows: To your classpath, add (whatever this location is on your machine):
+4. If Windows: To your classpath, add (whatever this location is on your machine):
 
 	C:\strawberry\perl\site\lib\auto\XML\LibXML
 
-4. Configure the properties file, config.properties
+5. Configure the properties file, config.properties
 	* Set the db user name and password
 	* Set the s3 id, password, bucket name
 	* Set the uploaded file prefix (s3keyprefix). This is essentially the "directory" the backup will be in.  This must end with a front slash (/).
@@ -28,14 +28,14 @@ Install Instructions
 	* Set the email server information so that you can be notified of the backups.  If you don't want notifications, remove the "to" email address from the configuration.
     * Set the directoriesToBackup to a comma separated list of the directories to zip and backup to s3.  Even on windows systems you should use front slashes (/) in the path.  Leave blank if no directories are to be backed up.
 
-5. The backup script can be invoked without a configuration file or invoked with the single argument of the configuration file to use.  Invoke like:
+6. The backup script can be invoked without a configuration file or invoked with the single argument of the configuration file to use.  Invoke like:
     perl backupdbs.pl
     or
     perl backupdbs.pl /path/to/config.properties
     or
     perl backupdbs.pl c:/path/to/config.properties
 	  
-6. Configure your machine to invoke the backupdbs.pl regularly.  On a Windows system:
+7. Configure your machine to invoke the backupdbs.pl regularly.  On a Windows system:
 	1. Right click on "My Computer", click "Manage".
 	2. Click Task Scheduler
 	3. Click Create Basic Task from the right-hand pane
