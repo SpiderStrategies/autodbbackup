@@ -3,6 +3,9 @@ Install Instructions
 
 1. Download and install Perl.  On windows, I used strawberry perl from the url [http://strawberryperl.com/](http://strawberryperl.com/).
 
+1.5 On an Ubuntu server, you may have to the following to install build tools.
+		apt-get install build-essential
+
 2. Add required archives.
 
 		perl -MCPAN -e "install Config::Properties"
