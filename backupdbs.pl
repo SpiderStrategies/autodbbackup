@@ -161,7 +161,8 @@ sub setupConfiguredValues {
 	@monthAbbr = qw( Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec );
 	$monthOfTheYear = $monthAbbr[$mon];
 	$yearValue = $year + 1900;
-	
+	$mmyyValue = $monthOfTheYear . "_" . $yearValue;
+	$dayInQuarterValue = "dayinquarter" . ($yday % 122);
 }
 
 # removeItemNames(@theSourceList, @theItemsToRemove)
@@ -422,6 +423,14 @@ sub createRollingBackupS3Keys {
 	}
 	if($rollingBackups =~ m/year/) {
 		my $s3duplicateDestination = $pre . "_" . $yearValue . $post;
+		$bucket->copy_key($s3duplicateDestination, $currentS3Key);
+	}
+	if($rollingBackups =~ m/inquarter/) {
+		my $s3duplicateDestination = $pre . "_" . $dayInQuarterValue . $post;
+		$bucket->copy_key($s3duplicateDestination, $currentS3Key);
+	}
+	if($rollingBackups =~ m/mm_yy/) {
+		my $s3duplicateDestination = $pre . "_" . $mmyyValue . $post;
 		$bucket->copy_key($s3duplicateDestination, $currentS3Key);
 	}
 }
