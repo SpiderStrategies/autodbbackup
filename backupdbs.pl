@@ -99,6 +99,9 @@ sub setupConfiguredValues {
 	$parentOutputLocation = $properties->getProperty('outputlocation');
 	$rollingBackups = $properties->getProperty('rollingbackups');
 	
+	#adds a marker for file names
+	$serverName = $properties->getProperty('serverName');
+	
 	$emailAddressesProperty = $properties->getProperty('emailAddresses');
 	if($emailAddressesProperty) {
 		@emailAddresses = split(/\,/, $emailAddressesProperty);
@@ -188,6 +191,7 @@ sub backupDatabases {
 		
 		# figure out where to write the file
 		$dbFileName = $database . ".sql";
+		
 		push @databaseFileNames, $dbFileName;
 		
 		$dbFileLocation = $outputlocation . "/" . $dbFileName;
@@ -269,7 +273,13 @@ sub createMultipleZipFiles {
 sub createAndSendZipFileForDatabase {
 	my ($database) = @_;
 	# create the zip file object
-	my $zipoutput = "$parentOutputLocation/$database" .  ".zip";
+	my $zipoutput;
+	unless(isBlank($serverName)) {
+		$zipoutput = "$parentOutputLocation/$database" . "-" . $serverName . ".zip";
+	}
+	else {
+		$zipoutput = "$parentOutputLocation/$database" .  ".zip";
+	}
 	my $zip = Archive::Zip->new();
 	
 	# add the restore scripts
@@ -295,6 +305,31 @@ sub createAndSendZipFileForDatabase {
 }
 
 sub zipDirectories {
+	
+	# We'll expand any directory with a * or ? with the find command
+	# This will let us wildcard directories to backup.
+	@expandedDirectories = ();
+	
+	foreach my $directory (@directoriesToBackup) {
+		if(index($directory, '*') != -1 or index($directory, '?') != -1) {
+			print "Expanding $directory\n";
+			$findCommand = "find / -path \"$directory\" 2>/dev/null";
+			print "The command: $findCommand\n";
+			@expanded = `$findCommand`;
+			foreach my $expdir (@expanded) {
+				chomp $expdir;
+				print "Adding $expdir\n";
+				push @expandedDirectories, $expdir;
+			}
+		}
+		else {
+			print "Adding $directory\n";
+			push @expandedDirectories, $directory;
+		}
+	}
+	
+	@directoriesToBackup = @expandedDirectories;
+	
 	foreach my $directory (@directoriesToBackup) {
 		zipDirectory($directory, $outputlocation);
 	}
@@ -304,7 +339,12 @@ sub zipDirectory {
 	my $dirToZip = shift @_;
 	my $outputDirectory = shift @_;
 	my @nameParts = split(/\//, $dirToZip);
-	my $zipName = pop @nameParts;
+	my $zipName = $dirToZip;
+	$zipName =~ s,/,_,g;
+	
+	unless(isBlank($serverName)) {
+		$zipName = $zipName . "-" . $serverName;
+	}
 	
 	my $zipoutput = $parentOutputLocation . "/" . $zipName . ".zip";
 	
@@ -497,11 +537,11 @@ sub isBlank {
 	
 	my $value = shift;
 	unless($value) {
-		return "true";
+		return true;
 	}
 	
 	if($value eq '') {
-		return "true";
+		return true;
 	}
 	
 	return undef;
