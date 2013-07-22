@@ -137,18 +137,23 @@ sub setupConfiguredValues {
 	if(!$databaseProperty || $databaseProperty eq '') {
 		$query = "mysql -u $dbusername -p" . "$dbpassword -e \"SHOW DATABASES\" information_schema";
 		@databases = `$query`;
-		shift @databases;
-		pop @databases;
+		my @tempdatabases = ();
+		
 		foreach $database (@databases) {
 			# remove any of the box formatting that mysql may have added
 			$database =~ s/[|]\s(\w*?)\s*[|]/$1/;
 			
 			# remove the return char
 			chomp $database;
+			if($database =~ /^\+/ != 1) {
+				push(@tempdatabases, $database);
+			}
 		}
 
+		@databases = @tempdatabases;
+		
 		# remove information_schema and mysql since we probably don't want those
-		@toRemove = qw / information_schema mysql /;
+		@toRemove = qw / Database information_schema performance_schema mysql /;
 		@databases = removeItemNames(\@databases, \@toRemove);
 	}
 	else {
