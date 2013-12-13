@@ -18,7 +18,7 @@ Install Instructions
 
 4. If Windows: To your classpath, add (whatever this location is on your machine):
 
-	C:\strawberry\perl\site\lib\auto\XML\LibXML
+	C:\strawberry\perl\vendor\lib\XML\LibXML
 
 5. Configure the properties file, config.properties
 	* Set the db user name and password
